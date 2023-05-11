@@ -41,7 +41,9 @@ namespace SqlKata
         /// </summary>
         /// <param name="table"></param>
         /// <returns></returns>
-        public Join JoinWith(string table) => From(table);
+        public Join JoinWith(string table) {
+            return From(table);
+        }
         public Join JoinWith(Query query) => From(query);
         public Join JoinWith(Func<Query, Query> callback) => From(callback);
 

@@ -1,3 +1,4 @@
+using SqlKata.Clauses;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -208,6 +209,7 @@ namespace SqlKata.Compilers
             var results = new[] {
                     this.CompileColumns(ctx),
                     this.CompileFrom(ctx),
+                    this.CompileWith(ctx),
                     this.CompileJoins(ctx),
                     this.CompileWheres(ctx),
                     this.CompileGroups(ctx),
@@ -688,6 +690,42 @@ namespace SqlKata.Compilers
 
         }
 
+        public virtual string CompileTableExpression(SqlResult ctx, AbstractWith with)
+        {
+            if (with is RawWithClause raw)
+            {
+                ctx.Bindings.AddRange(raw.Bindings);
+                return WrapIdentifiers(raw.Expression);
+            }
+
+            if (with is QueryWithClause queryFromClause)
+            {
+                var fromQuery = queryFromClause.Query;
+
+                var alias = string.IsNullOrEmpty(fromQuery.QueryAlias) ? "" : $" {TableAsKeyword}" + WrapValue(fromQuery.QueryAlias);
+
+                var subCtx = CompileSelectQuery(fromQuery);
+
+                ctx.Bindings.AddRange(subCtx.Bindings);
+
+                return "(" + subCtx.RawSql + ")" + alias;
+            }
+
+            if (with is WithClause withClause)
+            {
+                string result = string.Empty;
+                if ((withClause.Index ?? "") != "")
+                    result += Wrap(withClause.Index, TableClause.INDEX);
+                if (withClause.NoLock)
+                    return Wrap((result + " NOLOCK").TrimStart(), TableClause.WITH);
+                else
+                    return "";                
+            }
+
+            throw InvalidClauseException("TableExpression", with);
+        }
+
+
         public virtual string CompileTableExpression(SqlResult ctx, AbstractFrom from)
         {
             if (from is RawFromClause raw)
@@ -729,6 +767,18 @@ namespace SqlKata.Compilers
             return string.Empty;
         }
 
+        public virtual string CompileWith(SqlResult ctx)
+        {
+            if (ctx.Query.HasComponent("with", EngineCode))
+            {
+                var with = ctx.Query.GetOneComponent<AbstractWith>("with", EngineCode);
+
+                return "WITH " + CompileTableExpression(ctx, with);
+            }
+
+            return string.Empty;
+        }
+
         public virtual string CompileJoins(SqlResult ctx)
         {
             if (!ctx.Query.HasComponent("join", EngineCode))
@@ -748,8 +798,15 @@ namespace SqlKata.Compilers
 
             var from = join.GetOneComponent<AbstractFrom>("from", EngineCode);
             var conditions = join.GetComponents<AbstractCondition>("where", EngineCode);
+            var with = join.GetOneComponent<AbstractWith>("with", EngineCode);
 
             var joinTable = CompileTableExpression(ctx, from);
+            if (with != null)
+            {
+                var withTable = CompileTableExpression(ctx, with);
+                joinTable += (withTable ?? "") != "" ? " WITH " + withTable : "";
+            }
+
             var constraints = CompileConditions(ctx, conditions);
 
             var onClause = conditions.Any() ? $" ON {constraints}" : "";
@@ -920,6 +977,7 @@ namespace SqlKata.Compilers
         /// Wrap a single string in a column identifier.
         /// </summary>
         /// <param name="value"></param>
+        /// <param name="clause"></param>
         /// <returns></returns>
         public virtual string Wrap(string value)
         {
@@ -944,6 +1002,37 @@ namespace SqlKata.Compilers
             return WrapValue(value);
         }
 
+        /// <summary>
+        /// Wrap a single string in a column identifier.
+        /// </summary>
+        /// <param name="value"></param>
+        /// <param name="clause"></param>
+        /// <returns></returns>
+        public virtual string Wrap(string value, TableClause clause)
+        {
+
+            if (value.ToLowerInvariant().Contains(" as "))
+            {
+                var (before, after) = SplitAlias(value);
+
+                return Wrap(before, clause) + $" {ColumnAsKeyword}" + WrapValue(after, clause);
+            }
+
+            if (value.Contains("."))
+            {
+                return string.Join(".", value.Split('.').Select((x, index) =>
+                {
+                    return WrapValue(x, clause);
+                }));
+            }
+
+            // If we reach here then the value does not contain an "AS" alias
+            // nor dot "." expression, so wrap it as regular value.
+            return WrapValue(value, clause);
+        }
+
+
+
         public virtual (string, string) SplitAlias(string value)
         {
             var index = value.LastIndexOf(" as ", StringComparison.OrdinalIgnoreCase);
@@ -958,11 +1047,7 @@ namespace SqlKata.Compilers
             return (value, null);
         }
 
-        /// <summary>
-        /// Wrap a single string in keyword identifiers.
-        /// </summary>
-        /// <param name="value"></param>
-        /// <returns></returns>
+
         public virtual string WrapValue(string value)
         {
             if (value == "*") return value;
@@ -973,6 +1058,29 @@ namespace SqlKata.Compilers
             if (string.IsNullOrWhiteSpace(opening) && string.IsNullOrWhiteSpace(closing)) return value;
 
             return opening + value.Replace(closing, closing + closing) + closing;
+        }
+
+
+        /// <summary>
+        /// Wrap a single string in keyword identifiers.
+        /// </summary>
+        /// <param name="value"></param>
+        /// <param name="clause"></param>
+        /// <returns></returns>
+        public virtual string WrapValue(string value, TableClause clause)
+        {
+            if (value == "*") return value;
+
+            var opening = clause == TableClause.WITH || clause == TableClause.INDEX ? "(" : this.OpeningIdentifier;
+            var closing = clause == TableClause.WITH || clause == TableClause.INDEX ? ")" : this.ClosingIdentifier;
+
+            if (string.IsNullOrWhiteSpace(opening) && string.IsNullOrWhiteSpace(closing))
+                return value;
+
+            //var result = opening + value.Replace(closing, closing + closing) + closing;
+            var result = opening + value + closing;
+            result = clause == TableClause.INDEX ? "INDEX" + result : result;
+            return result;
         }
 
         /// <summary>

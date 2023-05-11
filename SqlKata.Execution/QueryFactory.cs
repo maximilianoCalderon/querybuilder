@@ -40,6 +40,15 @@ namespace SqlKata.Execution
             return query;
         }
 
+
+
+        ///<summary>
+        ///Create a Query from table name
+        ///</summary>
+        /// <param name="table">Table's name</param>
+
+
+
         public Query Query(string table)
         {
             return Query().From(table);

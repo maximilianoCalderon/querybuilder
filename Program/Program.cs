@@ -32,21 +32,61 @@ namespace Program
             public int DaysCount { get; set; }
         }
 
+        static List<string> ShowMethods(Type type)
+        {
+            List<string> result = new List<string>();
+            foreach (var method in type.GetMethods())
+            {
+                if (!result.Exists(x => x == method.Name))
+                {
+                    result.Add(method.Name);
+                }
+            }
+            return result;
+        }
+
         static void Main(string[] args)
         {
-            using (var db = SqlLiteQueryFactory())
-            {
-                var query = db.Query("accounts")
-                    .Where("balance", ">", 0)
-                    .GroupBy("balance")
-                .Limit(10);
+            var connection = new SqlConnection("Data Source=MyDb;User Id=User;Password=TopSecret");
+            var compiler = new SqlServerCompiler();
+            var db = new QueryFactory(connection, compiler);
 
-                var accounts = query.Clone().Get();
-                Console.WriteLine(JsonConvert.SerializeObject(accounts, Formatting.Indented));
+            //var query = db.Query("tbFacturaEnc").With("tbFacturaEnc", true, "IX_tbFacturaEnc");
+            //Console.WriteLine(db.Compiler.Compile(query).Sql);
+            //query = db.Query("tbFacturaEnc").With("tbFacturaEnc", true);
+            //Console.WriteLine(db.Compiler.Compile(query).Sql);
+            var query1 = db.Query("tbFacturaEnc")
+                .With(true)
+                .LeftJoinWith("tbFacturaDet", "tbFacturaDet.intFactura", "tbFacturaEnc.intFactura");
 
-                var exists = query.Clone().Exists();
-                Console.WriteLine(exists);
-            }
+            var query = db.Query("tbFacturaEnc")
+                .With(true)
+                .Where(p => p.Where("asd", ""))
+                .Select("",)
+                .Join("tbFacturaDet", "tbFacturaDet.intFactura", "tbFacturaEnc.intFactura");
+
+            //var methods = ShowMethods(typeof(Query));
+
+
+
+            Console.WriteLine(db.Compiler.Compile(query1).Sql);
+            Console.WriteLine("-------------------------------------------------------------");
+
+            Console.WriteLine(db.Compiler.Compile(query).Sql);
+
+            //using (var db = SqlLiteQueryFactory())
+            //{
+            //    var query = db.Query("accounts")
+            //        .With("NO LOCK")
+            //    .Limit(10);
+
+            //    Console.WriteLine(db.Compiler.Compile(query).Sql);
+            //    //var accounts = query.Clone().Get();
+            //    //Console.WriteLine(JsonConvert.SerializeObject(accounts, Formatting.Indented));
+
+            //    //var exists = query.Clone().Exists();
+            //    //Console.WriteLine(exists);
+            //}
         }
 
         private static void log(Compiler compiler, Query query)

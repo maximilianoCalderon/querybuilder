@@ -272,6 +272,17 @@ namespace SqlKata
             });
         }
 
+        public Q With(bool nolock = false, string index = null)
+        {
+            return AddOrReplaceComponent("with", new WithClause
+            {
+                //Table = table,
+                NoLock = nolock,
+                Index = index
+            });
+        }
+
+
         public Q From(Query query, string alias = null)
         {
             query = query.Clone();

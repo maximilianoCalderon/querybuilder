@@ -137,12 +137,12 @@ namespace SqlKata.Compilers
 
         public override string CompileTrue()
         {
-            return "cast(1 as bit)";
+            return "CAST(1 AS BIT)";
         }
 
         public override string CompileFalse()
         {
-            return "cast(0 as bit)";
+            return "CAST(0 AS BIT)";
         }
 
         protected override string CompileBasicDateCondition(SqlResult ctx, BasicDateCondition condition)
